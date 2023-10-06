@@ -13,9 +13,11 @@ program.parse();
 
 const options = program.opts();
 
+console.log(options);
+
 var path;
 
-if (options.first == undefined) {
+if (options.path == undefined) {
 	path = './';
 } else {
 	path = options.path;
@@ -35,12 +37,26 @@ try {
 			var data = fs.readFileSync(file, 'utf8');
 			var html = marked.parse(data);
 			var tmpPath = file.replace(join(path, 'texts/'), '');
-			tmpPath = tmpPath.replace(extname(tmpPath), '.hbs');
-			var partialName = 'texts.'+basename(file).replace(extname(file), '')
-				.replace('/', '.');
+			tmpPath = tmpPath.replace(extname(tmpPath), '');
+			var partialName = 'texts.'+tmpPath.replace(extname(file), '')
+				.replaceAll('/', '.');
 			Handlebars.registerPartial(partialName, html);
 		});
-
+	getHtml(join(path, 'texts/'))
+		.map((file) => {
+			var html = fs.readFileSync(file, 'utf8');
+			var tmpPath = file.replace(join(path, 'texts/'), '');
+			tmpPath = tmpPath.replace(extname(tmpPath), '');
+			var partialName = join('texts', tmpPath.replace(extname(file), ''))
+				.replaceAll('/', '.');
+			Handlebars.registerPartial(partialName, html);
+		});
+	getTemplates(join(path, 'partials/'))
+		.map((file) => {
+			var data = fs.readFileSync(file, 'utf8');
+			var name = basename(file, '.hbs');
+			Handlebars.registerPartial(name, data);
+		});
 	getTemplates(join(path, 'pages/'))
 		.map((file) => {
 			var data = fs.readFileSync(file, 'utf8');
@@ -69,6 +85,11 @@ function getMarkdown(path) {
 		.filter((path) => extname(path) == '.md');
 }
 
+function getHtml(path) {
+	return getFilesRecursive(path)
+		.filter((path) => extname(path) == '.html');
+}
+
 function getTemplates(path) {
 	return getFilesRecursive(path)
 		.filter((path) => extname(path) == '.hbs');
@@ -76,14 +97,15 @@ function getTemplates(path) {
 
 function getFilesRecursive(path) {
 	var files = fs.readdirSync(path, { withFileTypes: true });
-	var result = [];
-	for (const entry of files) {
-		if (entry.isDirectory()) {
-			result = result.concat(getTemplates(join(path, entry.name)));
+	const result = files.flatMap((entry) => {
+		let p = join(path, entry.name);
+		if (fs.lstatSync(p).isDirectory()) {
+			var t = getFilesRecursive(p);
+			return t;
 		}
-		if (entry.isFile()) {
-			result.push(join(path, entry.name));
+		if (fs.lstatSync(p).isFile()) {
+			return p;
 		}
-	}
+	});
 	return result;
 }
