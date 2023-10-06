@@ -32,25 +32,25 @@ try {
 } catch(err) {}
 
 try {
-	getMarkdown(join(path, 'texts/'))
+	getMarkdown(join(path, 'texts/ru/'))
 		.map((file) => {
 			var data = fs.readFileSync(file, 'utf8');
-			var html = marked.parse(data);
-			var tmpPath = file.replace(join(path, 'texts/'), '');
-			tmpPath = tmpPath.replace(extname(tmpPath), '');
-			var partialName = 'texts.'+tmpPath.replace(extname(file), '')
-				.replaceAll('/', '.');
-			Handlebars.registerPartial(partialName, html);
+			return ({ file, data: marked.parse(data) });
+		})
+		.concat(getHtml(join(path, 'texts/ru/'))
+			.map((file) => ( { file, data: fs.readFileSync(file, 'utf8') }))
+		)
+		.map(({ file, data }) => {
+			return { 
+				file: file.replace(join(path, 'texts/ru'), '').replace(extname(file), ''),
+				data
+			}
+		})
+		.forEach(({ file, data }) => {
+			const partialName = join('texts', file).replaceAll('/', '.');
+			Handlebars.registerPartial(partialName, data);
 		});
-	getHtml(join(path, 'texts/'))
-		.map((file) => {
-			var html = fs.readFileSync(file, 'utf8');
-			var tmpPath = file.replace(join(path, 'texts/'), '');
-			tmpPath = tmpPath.replace(extname(tmpPath), '');
-			var partialName = join('texts', tmpPath.replace(extname(file), ''))
-				.replaceAll('/', '.');
-			Handlebars.registerPartial(partialName, html);
-		});
+
 	getTemplates(join(path, 'partials/'))
 		.map((file) => {
 			var data = fs.readFileSync(file, 'utf8');
@@ -58,7 +58,7 @@ try {
 			Handlebars.registerPartial(name, data);
 		});
 	getTemplates(join(path, 'pages/'))
-		.map((file) => {
+		.forEach((file) => {
 			var data = fs.readFileSync(file, 'utf8');
 			const template = Handlebars.compile(data);
 			var data = "{}";
