@@ -9,11 +9,50 @@ program
 	.option('-p, --path [path]')
 	.option('-o, --output [path]')
 
+let config;
+try {
+	let input = fs.readFileSync('./config.json', 'utf8');
+	if (input) {
+		try {
+			config = JSON.parse(input);
+		} catch (err) {
+			switch (err.name) {
+				case 'SyntaxError': 
+					console.error(`Cannot parse JSON\nSyntax error: "${err.message}"`);
+					break;
+				default:
+					console.error(`Cannot parse JSON\n${err.name}: "${err.message}"`);
+					break;
+			}
+			return;
+		}
+	} else {
+		console.log('Config is empty');
+	}
+} catch (err) {
+	switch (err.code) {
+		case 'ENOENT':
+			console.error('Unable to open config: file not found');
+			break;
+		default:
+			console.error(err);
+			break;
+	}
+	return;
+}
+
+try {
+	checkConfig(config);
+} catch (err) {
+	console.error(err);
+	return;
+}
+
+config = setConfigDefaults(config);
+
 program.parse();
 
 const options = program.opts();
-
-console.log(options);
 
 var path;
 
@@ -32,15 +71,31 @@ try {
 } catch(err) {}
 
 try {
-	getTemplates(join(path, 'partials/'))
+	let partials = getTemplates(join(path, 'partials/'));
+	if (Array.isArray(config.extra_partials)) {
+		let extra = config.extra_partials
+			.flatMap((path) => getTemplates(path));
+		partials.push.apply(partials, extra);
+	}
+	partials
 		.forEach((file) => {
 			var data = fs.readFileSync(file, 'utf8');
 			var name = basename(file, '.hbs');
 			Handlebars.registerPartial(name, data);
 		});
 
-	let langs = parseLangs(join(path, 'texts/'));
-	console.log("Detected languages: " + langs);
+	let langs;
+	if (!config.i18n) {
+		langs = [];
+	} else {
+		langs = parseLangs(join(path, 'texts/'));
+		if (langs.length == 0) {
+			console.error("No languages detected");
+			return;
+		} else {
+			console.log("Detected languages: " + langs);
+		}
+	}
 
 	langs.forEach((lang) => {
 		registerTexts(join(path, join('texts', lang)));
@@ -125,4 +180,18 @@ function parseLangs(path) {
 	return files
 		.filter((file) => fs.lstatSync(join(path, file)).isDirectory())
 		.map((dir) => dir)
+}
+
+function setConfigDefaults(config) {
+	if (config.i18n === undefined) {
+		config.i18n = true;
+	}
+	return config;
+}
+
+function checkConfig(config) {
+	if (config.extra_partials !== undefined && !Array.isArray(config.extra_partials)) {
+		throw 'Extra partials must contain array of paths';
+	}
+	return;
 }
