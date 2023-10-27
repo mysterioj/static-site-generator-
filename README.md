@@ -5,8 +5,8 @@ This project is a static website generator
 - [x] Inject md and html text into templates
 - [x] Multi-lingual texts
 - [x] Config
+- [x] Resource syncing
 - [ ] Tidy html
-- [ ] Resource syncing
 - [ ] Media resizing
 
 
