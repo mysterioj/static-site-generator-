@@ -7,14 +7,26 @@ const { program } = require('commander');
 const Handlebars = require("handlebars");
 const stylus = require('stylus');
 
-process.env['LOG_LEVEL'] = 'info';
+program
+	.option('-p, --path path', 'set path to compile templates at', './')
+	.option('-o, --output path', 'set path to save compiled pages at', './out')
+	.option('-s, --sync', 'only sync resources')
+	.option('-q, --quiet', 'suppress non-error messages')
+	.option('-v, --verbose', 'increase verbosity')
+
+program.parse();
+
+const options = program.opts();
+
+if (!options.quiet) {
+	process.env['LOG_LEVEL'] = 'info';
+}
+
+if (options.verbose) {
+	process.env['LOG_LEVEL'] = 'debug';
+}
 
 require("log-node")();
-
-program
-	.option('-p, --path [path]')
-	.option('-o, --output [path]')
-	.option('-s, --sync')
 
 let config;
 try {
@@ -57,20 +69,13 @@ try {
 
 config = setConfigDefaults(config);
 
-program.parse();
-
-const options = program.opts();
 
 var out;
 
-if (options.output == undefined) {
-	if (process.env['COMPILE_OUTPUT'] == undefined) {
-		out = './out';
-	} else {
-		out = process.env['COMPILE_OUTPUT'];
-	}
-} else {
+if (process.env['COMPILE_OUTPUT'] == undefined) {
 	out = options.output;
+} else {
+	out = process.env['COMPILE_OUTPUT'];
 }
 
 if (!out.endsWith('/')) {
@@ -80,14 +85,10 @@ if (!out.endsWith('/')) {
 var path;
 
 
-if (options.path == undefined) {
-	if (process.env['COMPILE_PATH'] == undefined) {
-		path = './';
-	} else {
-		path = process.env['COMPILE_PATH'];
-	}
-} else {
+if (process.env['COMPILE_PATH'] == undefined) {
 	path = options.path;
+} else {
+	path = process.env['COMPILE_PATH'];
 }
 
 if (!path.endsWith('/')) {
