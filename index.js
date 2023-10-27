@@ -14,6 +14,7 @@ require("log-node")();
 program
 	.option('-p, --path [path]')
 	.option('-o, --output [path]')
+	.option('-s, --sync')
 
 let config;
 try {
@@ -63,7 +64,11 @@ const options = program.opts();
 var out;
 
 if (options.output == undefined) {
-	out = './out';
+	if (process.env['COMPILE_OUTPUT'] == undefined) {
+		out = './out';
+	} else {
+		out = process.env['COMPILE_OUTPUT'];
+	}
 } else {
 	out = options.output;
 }
@@ -74,8 +79,13 @@ if (!out.endsWith('/')) {
 
 var path;
 
+
 if (options.path == undefined) {
-	path = './';
+	if (process.env['COMPILE_PATH'] == undefined) {
+		path = './';
+	} else {
+		path = process.env['COMPILE_PATH'];
+	}
 } else {
 	path = options.path;
 }
@@ -83,6 +93,15 @@ if (options.path == undefined) {
 if (!path.endsWith('/')) {
 	path = path+'/';
 }
+
+if (options.sync === true) {
+	log.info("Resource sync...");
+	syncResources(join(path, 'resources'), out);
+	log.info("Done");
+	return;
+}
+
+
 try {
 	fs.mkdirSync('out');
 	fs.mkdirSync('.tmp');
@@ -128,10 +147,10 @@ try {
 					const template = Handlebars.compile(data);
 					var data = "{}";
 					const compiled = template(data);
-					if (options.output == undefined) {
-						log.info(compiled);
+					if (out == undefined) {
+						console.out(compiled);
 					} else {
-						var p = join(join(options.output, lang), file
+						var p = join(join(out, lang), file
 							.replace(join(path, 'pages'), '')
 							.replace(extname(file), '.html'));
 						try {
@@ -147,12 +166,17 @@ try {
 					} else {
 						log.error(e);
 					}
-					return 1;
+					return true;
 				}
-				return 0;
+				return false;
 			})
-			.reduce((res, val) => {
-				return { pages: res.pages + 1, errors: res.errors + val };
+			.reduce((res, err) => {
+				if (err) {
+					res.errors++;
+				} else {
+					res.pages++;
+				}
+				return res;
 			}, { pages: 0, errors: 0 });
 		log.info(`Compiled ${count.pages} page(s) with ${count.errors} error(s)`);
 	});

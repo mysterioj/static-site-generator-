@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "compile": "node index.js",
+	"sync": "node index.js --sync"
   },
   "author": "",
   "license": "ISC",
