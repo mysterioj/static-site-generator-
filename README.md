@@ -23,3 +23,6 @@ Available properties:
 - extra\_partials - `Array`  
     List directories in which to scan for extra partials.   
     Default: `undefined`
+- abort\_on\_error - `bool`  
+    Set it to `false` to proceed with execution instead of aborting.  
+    Default: `false`

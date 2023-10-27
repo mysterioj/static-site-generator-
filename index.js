@@ -1,9 +1,15 @@
+const { prepare, diff, apply } = require('@dldc/rsync');
+const log = require("log");
 const { marked } = require('marked');
 const fs = require('fs');
 const { join, extname, basename, dirname } = require('path');
 const { program } = require('commander');
 const Handlebars = require("handlebars");
 const stylus = require('stylus');
+
+process.env['LOG_LEVEL'] = 'info';
+
+require("log-node")();
 
 program
 	.option('-p, --path [path]')
@@ -18,24 +24,24 @@ try {
 		} catch (err) {
 			switch (err.name) {
 				case 'SyntaxError': 
-					console.error(`Cannot parse JSON\nSyntax error: "${err.message}"`);
+					log.error(`Cannot parse JSON\nSyntax error: "${err.message}"`);
 					break;
 				default:
-					console.error(`Cannot parse JSON\n${err.name}: "${err.message}"`);
+					log.error(`Cannot parse JSON\n${err.name}: "${err.message}"`);
 					break;
 			}
 			return;
 		}
 	} else {
-		console.log('Config is empty');
+		log.info('Config is empty');
 	}
 } catch (err) {
 	switch (err.code) {
 		case 'ENOENT':
-			console.error('Unable to open config: file not found');
+			log.error('Unable to open config: file not found');
 			break;
 		default:
-			console.error(err);
+			log.error(err);
 			break;
 	}
 	return;
@@ -44,7 +50,7 @@ try {
 try {
 	checkConfig(config);
 } catch (err) {
-	console.error(err);
+	log.error(err);
 	return;
 }
 
@@ -53,6 +59,18 @@ config = setConfigDefaults(config);
 program.parse();
 
 const options = program.opts();
+
+var out;
+
+if (options.output == undefined) {
+	out = './out';
+} else {
+	out = options.output;
+}
+
+if (!out.endsWith('/')) {
+	out = out+'/';
+}
 
 var path;
 
@@ -66,6 +84,7 @@ if (!path.endsWith('/')) {
 	path = path+'/';
 }
 try {
+	fs.mkdirSync('out');
 	fs.mkdirSync('.tmp');
 	fs.mkdirSync('.tmp/texts');
 } catch(err) {}
@@ -90,43 +109,73 @@ try {
 	} else {
 		langs = parseLangs(join(path, 'texts/'));
 		if (langs.length == 0) {
-			console.error("No languages detected");
+			log.error("No languages detected");
 			return;
 		} else {
-			console.log("Detected languages: " + langs);
+			log.info("Detected languages: " + langs);
 		}
 	}
 
 	langs.forEach((lang) => {
-		registerTexts(join(path, join('texts', lang)));
+		log.info(`Processing language "${lang}"`);
+		var texts_count = registerTexts(join(path, join('texts', lang)));
+		log.info(`Found ${texts_count} texts`);
 
-		getTemplates(join(path, 'pages/'))
-			.forEach((file) => {
+		var count = getTemplates(join(path, 'pages/'))
+			.map((file) => {
 				var data = fs.readFileSync(file, 'utf8');
-				const template = Handlebars.compile(data);
-				var data = "{}";
-				const compiled = template(data);
-				if (options.output == undefined) {
-					console.log(compiled);
-				} else {
-					var p = join(join(options.output, lang), file
-						.replace(join(path, 'pages'), '')
-						.replace(extname(file), '.html'));
-					try {
-						fs.mkdirSync(dirname(p), { recursive: true });
-					} catch(err) {}
-					fs.writeFileSync(p, compiled);
+				try {
+					const template = Handlebars.compile(data);
+					var data = "{}";
+					const compiled = template(data);
+					if (options.output == undefined) {
+						log.info(compiled);
+					} else {
+						var p = join(join(options.output, lang), file
+							.replace(join(path, 'pages'), '')
+							.replace(extname(file), '.html'));
+						try {
+							fs.mkdirSync(dirname(p), { recursive: true });
+						} catch(err) {}
+						fs.writeFileSync(p, compiled);
+					}
+				} catch(err) {
+					let p = file.replace(path, "");
+					let e = `Unable to compile template "${p}":\n${err.message}`;
+					if(config.abort_on_error) {
+						throw e;
+					} else {
+						log.error(e);
+					}
+					return 1;
 				}
-			});
+				return 0;
+			})
+			.reduce((res, val) => {
+				return { pages: res.pages + 1, errors: res.errors + val };
+			}, { pages: 0, errors: 0 });
+		log.info(`Compiled ${count.pages} page(s) with ${count.errors} error(s)`);
 	});
+	log.info("Resource sync...");
+	syncResources(join(path, 'resources'), out);
+	log.info("Done");
 } catch (err) {
-    console.error(err);
+    log.error(err);
     return;
 }
 
+function syncResources(res, out) {
+	let files = getFilesRecursive(res)
+		.forEach((f) => {
+			var destFile = f.replace(res, out).replace("//", "/");
+			const checksum = prepare(destFile); 
+			const patches = diff(f, checksum);
+			const syncedFile = apply(destFile, patches);	
+		});
+}
+
 function registerTexts(path) {
-	getMarkdown(path)
-		.map((file) => {
+	return getMarkdown(path).map((file) => {
 			var data = fs.readFileSync(file, 'utf8');
 			return ({ file, data: marked.parse(data) });
 		})
@@ -139,10 +188,11 @@ function registerTexts(path) {
 				data
 			}
 		})
-		.forEach(({ file, data }) => {
+		.map(({ file, data }) => {
 			const partialName = join('texts', file).replaceAll('/', '.');
 			Handlebars.registerPartial(partialName, data);
-		});
+		})
+		.length;
 }
 
 function getMarkdown(path) {
