@@ -1,4 +1,6 @@
 const { prepare, diff, apply } = require('@dldc/rsync');
+const { HtmlValidate } = require('html-validate');
+const { tidy } = require('htmltidy2')
 const log = require("log");
 const { marked } = require('marked');
 const fs = require('fs');
@@ -153,6 +155,23 @@ try {
 		var texts_count = registerTexts(join(path, join('texts', lang)));
 		log.info(`Found ${texts_count} texts`);
 
+		let preset;
+		if (config.validate_html) {
+			switch (config.validate_html.preset) {
+				case 'strict':
+					preset = ["html-validate:recommended"];
+					break;
+				default:
+					preset = ["html-validate:standard"];
+					break;
+			}
+		} else {
+			preset = [];
+		}
+		const htmlvalidate = new HtmlValidate(
+			{ extends: preset }
+		);
+
 		var count = getTemplates(join(path, 'pages/'))
 			.map((file) => {
 				var data = fs.readFileSync(file, 'utf8');
@@ -187,16 +206,34 @@ try {
 							log.error(error);
 						}
 					}
-					try {
-						fs.writeFileSync(p, compiled);
-					} catch(err) {
-						const error = `Unable to write page ${file}: ${err.message}`;
-						if (config.abort_on_error) {
-							throw error;
-						} else {
-							log.error(error);
+					tidy(compiled, { indent: true }, async function(e, html) {
+						if (e != '') {
+							log.error(e);
 						}
-					}
+						if (config.validate_html) {
+							const report = await htmlvalidate.validateString(html);
+							const rel_path = file.replace(path, '');
+							console.warn(
+								'%s warnings for page "%s":',
+								report.results[0].messages.length,
+								p.replace(out, '')
+							);
+							report.results[0].messages
+								.forEach((m) => {
+									console.warn('warning at line %s: %s', m.line, m.message);
+								});
+						}
+						try {
+							fs.writeFileSync(p, html);
+						} catch(err) {
+							const error = `Unable to write page ${file}: ${err.message}`;
+							if (config.abort_on_error) {
+								throw error;
+							} else {
+								log.error(error);
+							}
+						}
+					});
 				}
 				return false;
 			})
@@ -296,6 +333,16 @@ function setConfigDefaults(config) {
 function checkConfig(config) {
 	if (config.extra_partials !== undefined && !Array.isArray(config.extra_partials)) {
 		throw 'Extra partials must contain array of paths';
+	}
+	if (config.validate_html) {
+		switch (config.validate_html.preset) {
+			case undefined:
+			case 'standard':
+			case 'strict':
+				break;
+			default:
+				throw `Invalid validate html preset: ${config.validate_html.preset}`;
+		}
 	}
 	return;
 }
