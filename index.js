@@ -54,7 +54,7 @@ try {
 			log.error('Unable to open config: file not found');
 			break;
 		default:
-			log.error(err);
+			log.error(`Unable to open config: ${err.message}`);
 			break;
 	}
 	return;
@@ -105,9 +105,21 @@ if (options.sync === true) {
 
 try {
 	fs.mkdirSync('out');
-	fs.mkdirSync('.tmp');
-	fs.mkdirSync('.tmp/texts');
-} catch(err) {}
+} catch(err) {
+	if (err.code != 'EEXIST') {
+		log.error(`Unable to create out dir: ${err.message}`);
+		return;
+	}
+}
+
+try {
+	fs.mkdirSync('.tmp/texts', { recursive: true });
+} catch(err) {
+	if (err.code != 'EEXIST') {
+		log.error(`Unable to create temp dir: ${err.message}`);
+		return;
+	}
+}
 
 try {
 	let partials = getTemplates(join(path, 'partials/'));
@@ -144,30 +156,47 @@ try {
 		var count = getTemplates(join(path, 'pages/'))
 			.map((file) => {
 				var data = fs.readFileSync(file, 'utf8');
+				let compiled;
 				try {
 					const template = Handlebars.compile(data);
 					var data = "{}";
-					const compiled = template(data);
-					if (out == undefined) {
-						console.out(compiled);
-					} else {
-						var p = join(join(out, lang), file
-							.replace(join(path, 'pages'), '')
-							.replace(extname(file), '.html'));
-						try {
-							fs.mkdirSync(dirname(p), { recursive: true });
-						} catch(err) {}
-						fs.writeFileSync(p, compiled);
-					}
+					compiled = template(data);
 				} catch(err) {
 					let p = file.replace(path, "");
-					let e = `Unable to compile template "${p}":\n${err.message}`;
-					if(config.abort_on_error) {
+					let e = `Unable to compile template "${p}":${err.message}`;
+					if (config.abort_on_error) {
 						throw e;
 					} else {
 						log.error(e);
 					}
 					return true;
+				}
+				if (out == undefined) {
+					console.out(compiled);
+				} else {
+					var p = join(join(out, lang), file
+						.replace(join(path, 'pages'), '')
+						.replace(extname(file), '.html'));
+					try {
+						fs.mkdirSync(dirname(p), { recursive: true });
+					} catch(err) {
+						const error = `Unable to create output dir for page ${file}: ${err.message}`;
+						if (err.code != 'EEXIST' && config.abort_on_error) {
+							throw error;
+						} else {
+							log.error(error);
+						}
+					}
+					try {
+						fs.writeFileSync(p, compiled);
+					} catch(err) {
+						const error = `Unable to write page ${file}: ${err.message}`;
+						if (config.abort_on_error) {
+							throw error;
+						} else {
+							log.error(error);
+						}
+					}
 				}
 				return false;
 			})
