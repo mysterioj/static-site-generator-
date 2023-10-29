@@ -250,6 +250,11 @@ try {
 	log.info("Resource sync...");
 	syncResources(join(path, 'resources'), out);
 	log.info("Done");
+	if (config.css) {
+		log.info("Compile css...");
+		compileCss(join(path, 'styl'), out, config.css.ignore);
+		log.info("Done");
+	}
 } catch (err) {
     log.error(err);
     return;
@@ -258,10 +263,33 @@ try {
 function syncResources(res, out) {
 	let files = getFilesRecursive(res)
 		.forEach((f) => {
-			var destFile = f.replace(res, out).replace("//", "/");
+			const destFile = f.replace(res, out).replace("//", "/");
 			const checksum = prepare(destFile); 
 			const patches = diff(f, checksum);
 			const syncedFile = apply(destFile, patches);	
+		});
+}
+
+function compileCss(path, out, ignore) {
+	let files = getFilesRecursive(path)
+		.filter((f) => {
+			const dir = dirname(f).replace(path, '').replace('/', '').trim();
+			ignore != undefined && !ignore.includes(dir)
+		})
+		.forEach((f) => {
+			const destFile = f
+				.replace(path, out)
+				.replace('//', '/')
+				.replace(extname(f), '.css');
+			const input = fs.readFileSync(f, 'utf8');
+			stylus(input)
+				.include(path)
+				.set('filename', basename(f))
+				.render(function(err, css) {
+					if (err) throw `Error compiling css file ${f}: ${err.message}`;
+					fs.mkdirSync(dirname(destFile), { recursive: true });
+					fs.writeFileSync(destFile, css);
+				});
 		});
 }
 
@@ -324,6 +352,9 @@ function parseLangs(path) {
 }
 
 function setConfigDefaults(config) {
+	if (config.css === undefined) {
+		config.css = true;
+	}
 	if (config.i18n === undefined) {
 		config.i18n = true;
 	}
@@ -334,15 +365,16 @@ function checkConfig(config) {
 	if (config.extra_partials !== undefined && !Array.isArray(config.extra_partials)) {
 		throw 'Extra partials must contain array of paths';
 	}
-	if (config.validate_html) {
-		switch (config.validate_html.preset) {
-			case undefined:
-			case 'standard':
-			case 'strict':
-				break;
-			default:
-				throw `Invalid validate html preset: ${config.validate_html.preset}`;
-		}
+	if (config.css?.ignore !== undefined && !Array.isArray(config.css.ignore)) {
+		throw 'Ignored css directories must contain array of paths';
+	}
+	switch (config.validate_html?.preset) {
+		case undefined:
+		case 'standard':
+		case 'strict':
+			break;
+		default:
+			throw `Invalid validate html preset: ${config.validate_html.preset}`;
 	}
 	return;
 }

@@ -7,7 +7,7 @@ This project is a static website generator
 - [x] Config
 - [x] Resource syncing
 - [x] Tidy html
-- [ ] CSS preprocessor
+- [x] CSS preprocessor
 - [ ] Media resizing
 
 # Configuration reference
@@ -29,3 +29,6 @@ Available properties:
 - validate\_html - `bool`|`Object`  
     Set it to `true` to enable html validation  
     In order to tune warnings, set `preset` field to either `standard` or `strict` (default is `standard`)  
+- css - `bool`|`Object`  
+    Set it to `false` to disable css preprocessing  
+    You can add ignored paths by passing them as an array into `ignore` field  
