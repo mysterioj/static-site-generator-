@@ -1,5 +1,6 @@
 const { prepare, diff, apply } = require('@dldc/rsync');
 const { HtmlValidate } = require('html-validate');
+const watch = require('watch');
 const { tidy } = require('htmltidy2')
 const log = require("log");
 const { marked } = require('marked');
@@ -14,6 +15,7 @@ program
 	.option('-p, --path path', 'set path to compile templates at', './')
 	.option('-o, --output path', 'set path to save compiled pages at', './out')
 	.option('-s, --sync', 'only sync resources')
+	.option('-w, --watch', 'watch for changes in css and resources')
 	.option('-q, --quiet', 'suppress non-error messages')
 	.option('-v, --verbose', 'increase verbosity')
 
@@ -101,6 +103,45 @@ if (process.env['COMPILE_PATH'] == undefined) {
 if (!path.endsWith('/')) {
 	path = path+'/';
 }
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}   
+
+if (options.watch) {
+	log.info("Starting path watch");
+	log.info(path);
+	watch.watchTree(join(path, 'resources'), { interval: 1 }, function(f, p, c) {
+		if (c == null) {
+			return;
+		}
+		if (!options.quiet) {
+			process.env['LOG_LEVEL'] = 'info';
+		}
+		if (options.verbose) {
+			process.env['LOG_LEVEL'] = 'debug';
+		}
+		log.info("Resource sync...");
+		syncResources(join(path, 'resources'), out);
+	});
+	watch.watchTree(join(path, 'styl'), { interval: 1}, function(f, p, c) {
+		if (c == null) {
+			return;
+		}
+		if (!options.quiet) {
+			process.env['LOG_LEVEL'] = 'info';
+		}
+		if (options.verbose) {
+			process.env['LOG_LEVEL'] = 'debug';
+		}
+		log.info("Compile css...");
+		compileCss(join(path, 'styl'), out, config?.css.ignore);
+	});
+	return;
+}
+
 
 if (options.sync === true) {
 	log.info("Resource sync...");
