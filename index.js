@@ -32,28 +32,39 @@ if (options.verbose) {
 require("log-node")();
 
 let config;
+let input;
 try {
-	let input = fs.readFileSync('./config.json', 'utf8');
-	if (input) {
-		try {
-			config = YAML.parse(input);
-		} catch (err) {
-			log.error(`Cannot parse YAML\n${err.name}: "${err.message}"`);
-			return;
-		}
-	} else {
-		log.info('Config is empty');
-	}
+	input = fs.readFileSync('./config.yml', 'utf8');
 } catch (err) {
 	switch (err.code) {
 		case 'ENOENT':
-			log.error('Unable to open config: file not found');
+			try {
+				input = fs.readFileSync('./config.json', 'utf8');
+			} catch (err) {
+				switch (err.code) {
+					case 'ENOENT':
+						log.error('Unable to open config: file not found');
+						break;
+					default:
+						log.error(`Unable to open config: ${err.message}`);
+				}
+				return;
+			}
 			break;
 		default:
 			log.error(`Unable to open config: ${err.message}`);
-			break;
+			return;
 	}
-	return;
+}
+if (input) {
+	try {
+		config = YAML.parse(input);
+	} catch (err) {
+		log.error(`Cannot parse YAML\n${err.name}: "${err.message}"`);
+		return;
+	}
+} else {
+	log.info('Config is empty');
 }
 
 try {
@@ -176,7 +187,7 @@ try {
 					compiled = template(data);
 				} catch(err) {
 					let p = file.replace(path, "");
-					let e = `Unable to compile template "${p}":${err.message}`;
+					let e = `Unable to compile template "${p}": ${err.message}`;
 					if (config?.abort_on_error) {
 						throw e;
 					} else {
