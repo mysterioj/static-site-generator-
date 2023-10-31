@@ -6,8 +6,9 @@ This project is a static website generator
 - [x] Multi-lingual texts
 - [x] Config
 - [x] Resource syncing
-- [x] Tidy html
+- [x] HTML validation and pretty print
 - [x] CSS preprocessor
+- [x] Watch for file changes
 - [ ] Media resizing
 
 # Configuration reference
