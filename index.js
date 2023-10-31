@@ -8,6 +8,7 @@ const { join, extname, basename, dirname } = require('path');
 const { program } = require('commander');
 const Handlebars = require("handlebars");
 const stylus = require('stylus');
+const YAML = require('yaml');
 
 program
 	.option('-p, --path path', 'set path to compile templates at', './')
@@ -35,16 +36,9 @@ try {
 	let input = fs.readFileSync('./config.json', 'utf8');
 	if (input) {
 		try {
-			config = JSON.parse(input);
+			config = YAML.parse(input);
 		} catch (err) {
-			switch (err.name) {
-				case 'SyntaxError': 
-					log.error(`Cannot parse JSON\nSyntax error: "${err.message}"`);
-					break;
-				default:
-					log.error(`Cannot parse JSON\n${err.name}: "${err.message}"`);
-					break;
-			}
+			log.error(`Cannot parse YAML\n${err.name}: "${err.message}"`);
 			return;
 		}
 	} else {
@@ -125,8 +119,8 @@ try {
 
 try {
 	let partials = getTemplates(join(path, 'partials/'));
-	if (Array.isArray(config.extra_partials)) {
-		let extra = config.extra_partials
+	if (Array.isArray(config?.extra_partials)) {
+		let extra = config?.extra_partials
 			.flatMap((path) => getTemplates(path));
 		partials.push.apply(partials, extra);
 	}
@@ -156,8 +150,8 @@ try {
 		log.info(`Found ${texts_count} texts`);
 
 		let preset;
-		if (config.validate_html) {
-			switch (config.validate_html.preset) {
+		if (config?.validate_html) {
+			switch (config?.validate_html.preset) {
 				case 'strict':
 					preset = ["html-validate:recommended"];
 					break;
@@ -183,7 +177,7 @@ try {
 				} catch(err) {
 					let p = file.replace(path, "");
 					let e = `Unable to compile template "${p}":${err.message}`;
-					if (config.abort_on_error) {
+					if (config?.abort_on_error) {
 						throw e;
 					} else {
 						log.error(e);
@@ -200,7 +194,7 @@ try {
 						fs.mkdirSync(dirname(p), { recursive: true });
 					} catch(err) {
 						const error = `Unable to create output dir for page ${file}: ${err.message}`;
-						if (err.code != 'EEXIST' && config.abort_on_error) {
+						if (err.code != 'EEXIST' && config?.abort_on_error) {
 							throw error;
 						} else {
 							log.error(error);
@@ -210,7 +204,7 @@ try {
 						if (e != '') {
 							log.error(e);
 						}
-						if (config.validate_html) {
+						if (config?.validate_html) {
 							const report = await htmlvalidate.validateString(html);
 							const rel_path = file.replace(path, '');
 							console.warn(
@@ -227,7 +221,7 @@ try {
 							fs.writeFileSync(p, html);
 						} catch(err) {
 							const error = `Unable to write page ${file}: ${err.message}`;
-							if (config.abort_on_error) {
+							if (config?.abort_on_error) {
 								throw error;
 							} else {
 								log.error(error);
@@ -250,9 +244,9 @@ try {
 	log.info("Resource sync...");
 	syncResources(join(path, 'resources'), out);
 	log.info("Done");
-	if (config.css) {
+	if (config?.css) {
 		log.info("Compile css...");
-		compileCss(join(path, 'styl'), out, config.css.ignore);
+		compileCss(join(path, 'styl'), out, config?.css.ignore);
 		log.info("Done");
 	}
 } catch (err) {
@@ -352,6 +346,9 @@ function parseLangs(path) {
 }
 
 function setConfigDefaults(config) {
+	if (config == undefined) {
+		config = {};
+	}
 	if (config.css === undefined) {
 		config.css = true;
 	}
@@ -362,13 +359,13 @@ function setConfigDefaults(config) {
 }
 
 function checkConfig(config) {
-	if (config.extra_partials !== undefined && !Array.isArray(config.extra_partials)) {
+	if (config?.extra_partials !== undefined && !Array.isArray(config.extra_partials)) {
 		throw 'Extra partials must contain array of paths';
 	}
-	if (config.css?.ignore !== undefined && !Array.isArray(config.css.ignore)) {
+	if (config?.css?.ignore !== undefined && !Array.isArray(config.css.ignore)) {
 		throw 'Ignored css directories must contain array of paths';
 	}
-	switch (config.validate_html?.preset) {
+	switch (config?.validate_html?.preset) {
 		case undefined:
 		case 'standard':
 		case 'strict':
