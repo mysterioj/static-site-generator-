@@ -9,7 +9,7 @@ This project is a static website generator
 - [x] HTML validation and pretty print
 - [x] CSS preprocessor
 - [x] Watch for file changes
-- [ ] Media resizing
+- [x] Media resizing
 
 # Configuration reference
 
