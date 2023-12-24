@@ -6,7 +6,8 @@
   "scripts": {
     "compile": "node index.js",
     "sync": "node index.js --sync",
-    "watch": "node index.js --watch"
+    "watch": "node index.js --watch",
+	"init": "node index.js init"
   },
   "author": "",
   "license": "ISC",
@@ -16,6 +17,8 @@
     "handlebars": "^4.7.8",
     "html-validate": "^8.7.0",
     "htmltidy2": "^1.1.1",
+    "jimp": "^0.22.10",
+    "libvips": "^0.0.2",
     "log": "^6.3.1",
     "log-node": "^8.0.3",
     "marked": "^7.0.3",

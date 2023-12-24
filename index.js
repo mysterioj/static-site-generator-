@@ -1,4 +1,5 @@
 const { prepare, diff, apply } = require('@dldc/rsync');
+const Jimp = require("jimp");
 const { HtmlValidate } = require('html-validate');
 const watch = require('watch');
 const { tidy } = require('htmltidy2')
@@ -12,6 +13,68 @@ const stylus = require('stylus');
 const YAML = require('yaml');
 
 program
+	.command('init <path>')
+	.action(path => {
+		process.env['LOG_LEVEL'] = 'info';
+		tryIgnoreEEXIST(() => fs.mkdirSync(join(path, 'out')));
+		tryIgnoreEEXIST(() => fs.mkdirSync(join(path, 'src')));
+		tryIgnoreEEXIST(() => fs.mkdirSync(join(path, 'src/texts/')));
+		tryIgnoreEEXIST(() => fs.mkdirSync(join(path, 'src/pages/')));
+		tryIgnoreEEXIST(() => fs.mkdirSync(join(path, 'src/resources/')));
+		tryIgnoreEEXIST(() => fs.mkdirSync(join(path, 'src/texts/en/')));
+		tryIgnoreEEXIST(() => fs.mkdirSync(join(path, 'src/partials/')));
+		tryIgnoreEEXIST(() => fs.mkdirSync(join(path, 'src/styl/')));
+		tryIgnoreEEXIST(() => fs.writeFileSync(
+			join(path, 'src/partials/basis.hbs'), 
+			`
+<html>
+	<head>
+		{{#>dependencies}}
+		{{/dependencies}}
+	</head>
+	<body>
+		{{>content}}
+	</body>
+</html>
+			`
+		));
+		tryIgnoreEEXIST(() => fs.writeFileSync(
+			join(path, 'src/index.hbs'), 
+			`
+{{#*inline "dependencies"}}
+<link rel="stylesheet" href="/style.css" />
+{{/inline}}
+{{#*inline "content"}}
+<h1>{{>texts.hello}}</h1>
+{{/inline}}
+{{>basis}}
+			`
+		));
+		tryIgnoreEEXIST(() => fs.writeFileSync(
+			join(path, 'src/styl/style.styl'),
+			`
+body
+	margin: 0
+			`
+		));
+		tryIgnoreEEXIST(() => fs.writeFileSync(
+			join(path, 'src/texts/en/hello.html'),
+			`
+Hello world
+			`
+		));
+		console.log('Successfully initialized website at %s', path);
+	});
+
+let compile = false;
+
+program
+	.command('compile', { isDefault: true })
+	.action(() => { 
+		compile = true;
+	});
+
+program
 	.option('-p, --path path', 'set path to compile templates at', './')
 	.option('-o, --output path', 'set path to save compiled pages at', './out')
 	.option('-s, --sync', 'only sync resources')
@@ -20,6 +83,10 @@ program
 	.option('-v, --verbose', 'increase verbosity')
 
 program.parse();
+
+if (!compile) {
+	return;
+}
 
 const options = program.opts();
 
@@ -32,6 +99,7 @@ if (options.verbose) {
 }
 
 require("log-node")();
+
 
 let config;
 let input;
@@ -218,7 +286,8 @@ try {
 			{ extends: preset }
 		);
 
-		var count = getTemplates(join(path, 'pages/'))
+		var count = getTemplates(path)
+			.filter((file) => !file.includes('partials'))
 			.map((file) => {
 				var data = fs.readFileSync(file, 'utf8');
 				let compiled;
@@ -237,10 +306,11 @@ try {
 					return true;
 				}
 				if (out == undefined) {
-					console.out(compiled);
+					console.log(compiled);
 				} else {
 					var p = join(join(out, lang), file
-						.replace(join(path, 'pages'), '')
+						.replace(path, '')
+						.replace('pages', '')
 						.replace(extname(file), '.html'));
 					try {
 						fs.mkdirSync(dirname(p), { recursive: true });
@@ -253,20 +323,26 @@ try {
 						}
 					}
 					tidy(compiled, { indent: true }, async function(e, html) {
+						if (!options.quiet) {
+							process.env['LOG_LEVEL'] = 'info';
+						}
+						if (options.verbose) {
+							process.env['LOG_LEVEL'] = 'debug';
+						}
 						if (e != '') {
 							log.error(e);
 						}
 						if (config?.validate_html) {
 							const report = await htmlvalidate.validateString(html);
 							const rel_path = file.replace(path, '');
-							console.warn(
+							log.warn(
 								'%s warnings for page "%s":',
 								report.results[0].messages.length,
 								p.replace(out, '')
 							);
 							report.results[0].messages
 								.forEach((m) => {
-									console.warn('warning at line %s: %s', m.line, m.message);
+									log.warn('warning at line %s: %s', m.line, m.message);
 								});
 						}
 						try {
@@ -301,6 +377,9 @@ try {
 		compileCss(join(path, 'styl'), out, config?.css.ignore);
 		log.info("Done");
 	}
+	log.info("Resize media...");
+	resizeMedia(join(out, 'img'));
+	log.info("Done");
 } catch (err) {
     log.error(err);
     return;
@@ -309,10 +388,19 @@ try {
 function syncResources(res, out) {
 	let files = getFilesRecursive(res)
 		.forEach((f) => {
+			const input = f.readFileSync(f, 'utf8');
 			const destFile = f.replace(res, out).replace("//", "/");
+			let dest;
+			if (fs.existsSync(destFile)) {
+				dest = fs.readFileSync(destFile, 'utf8');
+			} else {
+				dest = [];
+			}
 			const checksum = prepare(destFile); 
 			const patches = diff(f, checksum);
 			const syncedFile = apply(destFile, patches);	
+			fs.mkdirSync(dirname(destFile), { recursive: true });
+			fs.writeFileSync(destFile, Buffer.from(syncedFile));
 		});
 }
 
@@ -426,4 +514,36 @@ function checkConfig(config) {
 			throw `Invalid validate html preset: ${config.validate_html.preset}`;
 	}
 	return;
+}
+
+function resizeMedia(path) {
+	if (!fs.existsSync(path)) {
+		return
+	}
+	const media = getFilesRecursive(path);
+	media
+		.filter((file) => extname(file) == '.png' || extname(file) == '.jpg')
+		.forEach((file) => {
+			const output = file
+				.replace(extname(file), '_480'+extname(file));
+			if (fs.existsSync(output)) {
+				return;
+			}
+			Jimp.read(file)
+				.then((file) => {
+					return file 
+						.scaleToFit(960, 480)
+						.write(output);
+				});
+		});
+}
+
+function tryIgnoreEEXIST(fn) {
+	try {
+		fn();
+	} catch (err) {
+		if (err.code != 'EEXIST') {
+			throw err
+		}
+	}
 }
