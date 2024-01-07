@@ -3,5 +3,5 @@ node_modules/
 output/
 tmp/
 /pages/
-texts/
+/texts/
 config.json
