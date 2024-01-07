@@ -293,7 +293,7 @@ try {
 				let compiled;
 				try {
 					const template = Handlebars.compile(data);
-					var data = "{}";
+					var data = { lang: lang };
 					compiled = template(data);
 				} catch(err) {
 					let p = file.replace(path, "");
@@ -378,7 +378,7 @@ try {
 		log.info("Done");
 	}
 	log.info("Resize media...");
-	resizeMedia(join(out, 'img'));
+	// resizeMedia(join(out, 'img'));
 	log.info("Done");
 } catch (err) {
     log.error(err);
@@ -388,18 +388,21 @@ try {
 function syncResources(res, out) {
 	let files = getFilesRecursive(res)
 		.forEach((f) => {
-			const input = f.readFileSync(f, 'utf8');
+			const input = fs.readFileSync(f);
 			const destFile = f.replace(res, out).replace("//", "/");
 			let dest;
 			if (fs.existsSync(destFile)) {
-				dest = fs.readFileSync(destFile, 'utf8');
+				dest = fs.readFileSync(destFile);
 			} else {
 				dest = [];
+				fs.mkdirSync(dirname(destFile), { recursive: true });
+				fs.writeFileSync(destFile, input);
+				return;
 			}
 			const checksum = prepare(destFile); 
-			const patches = diff(f, checksum);
-			const syncedFile = apply(destFile, patches);	
+			const patches = diff(input, checksum);
 			fs.mkdirSync(dirname(destFile), { recursive: true });
+			const syncedFile = apply(destFile, patches);	
 			fs.writeFileSync(destFile, Buffer.from(syncedFile));
 		});
 }
@@ -408,11 +411,11 @@ function compileCss(path, out, ignore) {
 	let files = getFilesRecursive(path)
 		.filter((f) => {
 			const dir = dirname(f).replace(path, '').replace('/', '').trim();
-			ignore != undefined && !ignore.includes(dir)
+			return ignore == undefined || !ignore.includes(dir);
 		})
 		.forEach((f) => {
 			const destFile = f
-				.replace(path, out)
+				.replace(path, join(out, 'css'))
 				.replace('//', '/')
 				.replace(extname(f), '.css');
 			const input = fs.readFileSync(f, 'utf8');
@@ -529,6 +532,7 @@ function resizeMedia(path) {
 			if (fs.existsSync(output)) {
 				return;
 			}
+			console.log(file);
 			Jimp.read(file)
 				.then((file) => {
 					return file 
