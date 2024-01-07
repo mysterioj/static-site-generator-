@@ -2,6 +2,6 @@ node_modules/
 .tmp/
 output/
 tmp/
-pages/
+/pages/
 texts/
 config.json
